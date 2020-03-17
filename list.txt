@@ -1,0 +1,6 @@
+efaecal1 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322065.1_Ente_faec_E1731_V1_genomic.fna.gz
+efaecal2 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322225.1_Ente_faec_E2620_V1_genomic.fna.gz
+efaecal3 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322365.1_Ente_faec_E1644_V1_genomic.fna.gz
+efaecal4 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000390965.1_Ente_faec_B1327_V1_genomic.fna.gz
+efaceal5 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000391005.1_Ente_faec_B1385_V1_genomic.fna.gz
+efaecal6 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000391065.1_Ente_faec_B1532_V1_genomic.fna.gz
