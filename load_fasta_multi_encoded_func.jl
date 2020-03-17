@@ -32,39 +32,38 @@ function main()
 		db[idx] = merdb
 	end
 
-	for (name, path) in genomes
-		idx =  genome2arr[name]
-		act_db = db[idx]
-		for (mer, count) in act_db
-			# println(name,"\t",mer,"\t",count)
-			enc_mer = BioSequences.encoded_data(mer)
-			dec_mer = DNAMer{27}(enc_mer)
-			# println(name,"\t",mer,"\t",string(enc_mer),"\t",string(dec_mer))
-			if(string(mer) != string(dec_mer))
-				println(name,"\t",mer," doesnt matches")
-			end
-		end	
-	end
-
-
-	#for i in 2:genome_tot
-	#	refdb = db[1]
-	#	destdb = db[i]
-	#	tag_kmer!(refdb,destdb)
-	#	
-	#end
-
 	#for (name, path) in genomes
 	#	idx =  genome2arr[name]
 	#	act_db = db[idx]
 	#	for (mer, count) in act_db
-	#		if count > 0
-	#			println(name,"\t",mer,"\t",count)
-	#		end	
+	#		# println(name,"\t",mer,"\t",count)
+	#		enc_mer = BioSequences.encoded_data(mer)
+	#		dec_mer = DNAMer{27}(enc_mer)
+	#		# println(name,"\t",mer,"\t",string(enc_mer),"\t",string(dec_mer))
+	#		if(string(mer) != string(dec_mer))
+	#			println(name,"\t",mer," doesnt matches")
+	#		end
 	#	end	
 	#end
-	
 
+	act_db = db[1]
+	arr = Array{UInt64}(undef,length(keys(act_db)))
+	encode_kmer_table!(act_db, arr)	
+
+	for i in 1:length(arr)
+		str = string(DNAMer{27}(arr[i]))
+		println(arr[i],"\t",str)
+	end
+
+end
+
+function encode_kmer_table!(db::Dict{DNAMer{27}, Int8}, arr::Array{UInt64})
+	idx=1
+	for (mer, count) in db
+		enc_mer = BioSequences.encoded_data(mer)
+		arr[idx] = enc_mer
+		idx += 1		
+	end	
 end
 
 function load_kmer!(path::String, db::Dict{DNAMer{27}, Int8}, kmer_size::Int)

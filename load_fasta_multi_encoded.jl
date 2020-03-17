@@ -32,23 +32,37 @@ function main()
 		db[idx] = merdb
 	end
 
-	for i in 2:genome_tot
-		refdb = db[1]
-		destdb = db[i]
-		tag_kmer!(refdb,destdb)
-		
-	end
-
-
 	for (name, path) in genomes
 		idx =  genome2arr[name]
 		act_db = db[idx]
 		for (mer, count) in act_db
-			if count > 0
-				println(name,"\t",mer,"\t",count)
-			end	
+			# println(name,"\t",mer,"\t",count)
+			enc_mer = BioSequences.encoded_data(mer)
+			dec_mer = DNAMer{27}(enc_mer)
+			# println(name,"\t",mer,"\t",string(enc_mer),"\t",string(dec_mer))
+			if(string(mer) != string(dec_mer))
+				println(name,"\t",mer," doesnt matches")
+			end
 		end	
 	end
+
+
+	#for i in 2:genome_tot
+	#	refdb = db[1]
+	#	destdb = db[i]
+	#	tag_kmer!(refdb,destdb)
+	#	
+	#end
+
+	#for (name, path) in genomes
+	#	idx =  genome2arr[name]
+	#	act_db = db[idx]
+	#	for (mer, count) in act_db
+	#		if count > 0
+	#			println(name,"\t",mer,"\t",count)
+	#		end	
+	#	end	
+	#end
 	
 
 end

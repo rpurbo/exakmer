@@ -109,6 +109,11 @@ function main()
 	sleep(10)
 
 	# Next, 1) encode kmers to UInt64, 2) scatter & gather kmers from worker, 3) broadcast the kmers. 
+	# steps
+	# 1) root: scatter active worker
+	# 2) active worker: encoded kmer, send back via gather. passive worker, send null
+	# 3) root: broadcast encoded kmers
+	# 4) workers: tag kmers (dont self-tag)
 end
 
 
@@ -167,6 +172,19 @@ function tag_kmer!(refdb::Dict{DNAMer{27}, Int8}, subjdb::Dict{DNAMer{27}, Int8}
 		subjdb[mer] = 0
 	end
 
+end
+
+#########################################
+# function: encode_kmer_table!
+# Encode kmer table dictionary to array of UInt64 (for MPI comm)
+#########################################  
+function encode_kmer_table!(db::Dict{DNAMer{27}, Int8}, arr::Array{UInt64})
+	idx=1
+	for (mer, count) in db
+		enc_mer = BioSequences.encoded_data(mer)
+		arr[idx] = enc_mer
+		idx += 1
+	end
 end
 
 
