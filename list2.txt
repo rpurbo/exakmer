@@ -1,2 +1,2 @@
-efaecal1	/gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322225.1_Ente_faec_E2620_V1_genomic.fna.gz
-efaecal2	/gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322225.1_Ente_faec_E2620_V1_genomic.fna.gz
+efaecal1 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322225.1_Ente_faec_E2620_V1_genomic.fna.gz
+efaecal2 /gpfs1/scratch/admin/projects/julia/bio/files/GCA_000322225.1_Ente_faec_E2620_V1_genomic.fna.gz

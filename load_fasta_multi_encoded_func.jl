@@ -7,14 +7,14 @@ using DataStructures
 
 function main()
 	KMER_SIZE =27
-	input="list2.txt"
+	input="list.txt"
 	genomes = Dict{String, String}()
 	genome2arr = Dict{String, UInt8}()
 
 	idx = 1
 	open(input, "r") do file
 		for line in eachline(file)
-			arr = split(line,"\t")
+			arr = split(line," ")
 			genomes[arr[1]] = arr[2]
 			genome2arr[arr[1]] = idx
 			idx = idx + 1
@@ -25,12 +25,14 @@ function main()
 	db = Array{ Dict{DNAMer{KMER_SIZE}, Int8}}(undef,genome_tot)
 
 	for (name, path) in genomes
-		# println("loading ",name, " ", genome2arr[name])
+		#println("loading ",name, " ", genome2arr[name])
 		idx =  genome2arr[name]
 		merdb = Dict{DNAMer{KMER_SIZE}, Int8}()
 		load_kmer!(path, merdb,KMER_SIZE)
 		db[idx] = merdb
+		#println(Base.summarysize(db))
 	end
+
 
 	#for (name, path) in genomes
 	#	idx =  genome2arr[name]
@@ -46,14 +48,14 @@ function main()
 	#	end	
 	#end
 
-	act_db = db[1]
-	arr = Array{UInt64}(undef,length(keys(act_db)))
-	encode_kmer_table!(act_db, arr)	
+	#act_db = db[1]
+	#arr = Array{UInt64}(undef,length(keys(act_db)))
+	#encode_kmer_table!(act_db, arr)	
 
-	for i in 1:length(arr)
-		str = string(DNAMer{27}(arr[i]))
-		println(arr[i],"\t",str)
-	end
+	#for i in 1:length(arr)
+	#	str = string(DNAMer{27}(arr[i]))
+	#	println(arr[i],"\t",str)
+	#end
 
 end
 
@@ -89,4 +91,4 @@ function tag_kmer!(refdb::Dict{DNAMer{27}, Int8}, subjdb::Dict{DNAMer{27}, Int8}
 end
 
 
-main()
+@time main()
