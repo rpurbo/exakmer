@@ -5,7 +5,7 @@ using GZip
 using CodecZlib
 using Dictionaries
 using DataStructures
-
+using Printf
 
 mutable struct composite_kmer_table
 	occ_idx::Int8
@@ -30,6 +30,14 @@ mutable struct composite_kmer_table
 	end
 end
 
+mutable struct genome_list
+	kmer_size::Int
+	size::Int
+	fasta::Dict{UInt8, String}
+	names::Dict{UInt8, String}
+	partition::Dict{UInt8, UInt8}
+end
+
 #########################################
 # Main Function
 #########################################
@@ -38,6 +46,11 @@ function main()
 	# Init parameters
 	file = "list.txt"
 	ksize = 27
+
+	##########################################################################
+	## STAGE 1
+	## Set up MPI comms and load genomes as kmer table to memory
+        ##########################################################################
 
 	# Init MPI
 	MPI.Init()
@@ -101,33 +114,123 @@ function main()
 	end
 
 	# On workers, read the genome fasta files and load them to tables
+	ckt = nothing
 	if(mpi_rank != root) 
 		genomes_num = length(keys(gpath))
-		kmer_dicts = Array{ Dict{DNAMer{kmer_size}, Int8}}(undef,genomes_num)
+		ckt = composite_kmer_table(genomes_num)
 		
-		idx = 1
 		for (name,path) in gpath
 			# println("",banner," ", name, " ",path)
 			gtable = Dict{DNAMer{kmer_size}, Int8}()
 			load_kmer!(path, gtable, kmer_size)
-			kmer_dicts[idx] = gtable
-
-			gname2idx[name] = idx
-			gidx2name[idx] = name
-			idx += 1	
+			CKT_add_kmer_table!(ckt, name, gtable)
+			gtable = nothing
 		end	
 	end
 
 	# Barrier to ensure all workers loaded their assigned genomes
 	MPI.Barrier(comm)
-	sleep(10)
 
-	# Next, 1) encode kmers to UInt64, 2) scatter & gather kmers from worker, 3) broadcast the kmers. 
-	# steps
-	# 1) root: scatter active worker
-	# 2) active worker: encoded kmer, send back via gather. passive worker, send null
-	# 3) root: broadcast encoded kmers
-	# 4) workers: tag kmers (dont self-tag)
+	##########################################################################
+	## STAGE 2
+	## Run the scatter & gather communication
+	## 1) root assign active worker (consecutively based on rank) - scatter
+	## 2) active worker send its kmer table to root - gather
+	## 3) root broadcast kmer table - broadcast
+	## 4) workers tag the received kmer table - broadcast
+	##########################################################################
+
+	# For all non-root workers. For mpi_size cluster, root(rank=0)'s data is in array[1].
+	# workers(rank=i)'s data is in array[i+1].
+	for active in 2:mpi_size
+
+		# Stage 2.1 - Init communication buffers
+		if(mpi_rank == root)
+			send_mesg = Array{Int8}(undef, mpi_size)
+			recv_mesg = Array{Int8}(undef, mpi_size)
+			bcast_mesg = Array{Int8}(undef, 1)
+
+			fill!(send_mesg,0)
+			send_mesg[active] = 1
+		else
+			buff = Array{Int8}(undef, 1)
+		end
+
+		# Stage 2.2 - Root send active assignment to workers consecutively
+		isActive = 0
+		if(mpi_rank == root)
+			MPI.Scatter_in_place!(send_mesg,1,root,comm)
+
+			#debug
+			#for i in 2:(mpi_size)
+			#	out = "[root] " * string(i-1) * " " * string(send_mesg[i])
+			#	println(out)
+			#end
+		else
+			buff = Array{Int8}(undef, 1)
+			MPI.Scatter_in_place!(buff,1,root,comm)
+			isActive = buff[1]
+
+			#debug
+			#if(isActive == 1)
+			#	println("",banner," is active")
+			#end
+		end
+
+		# Stage 2.3 - Active worker send the kmer table to root directly
+		ckt_arr = UInt64[]
+		active_rank = active-1
+
+		if(mpi_rank == root)
+			# Get incoming kmer table size
+			buff = Array{Int64}(undef, 1)
+			MPI.Recv!(buff, active_rank, 1, comm)
+			arr_size = buff[1]
+
+			# Receive kmer table
+			ckt_arr = Array{UInt64}(undef, arr_size)
+			MPI.Recv!(ckt_arr, active_rank, 2, comm)			
+
+			#debug
+			#for kmer_int in ckt_arr
+			#	key = DNAMer{27}(kmer_int)
+			#	println("",banner,string(key))
+			#end
+		else
+			if(isActive == 1)
+				# Send the size of kmer table for memory allocation
+				CKT_get_all_encoded_genome_kmer_arr!(ckt,ckt_arr)
+				arr_size = length(ckt_arr)
+				buff = Array{Int64}(undef, 1)
+				buff[1] = arr_size		
+				MPI.Send(buff, root, 1, comm)
+
+				# Send the kmer table
+				MPI.Send(ckt_arr, root, 2, comm)
+			end
+		end
+
+		# Stage 2.4 - Broadcast kmer table to all workers (except active)
+		recv_arr = nothing
+		if(mpi_rank == root)
+			#println("bcast rank ", string(active_rank)," ", string(length(ckt_arr)))
+			MPI.bcast(ckt_arr, root, comm)
+		else	
+			recv_arr = MPI.bcast(C_NULL, root, comm)
+			#println("", banner, "active rank:", string(active_rank)," size:", string(length(recv_arr)))
+		end
+
+		# Stage 2.5 - Tag non-active workers's CKT kmer table using the received kmers
+		if(mpi_rank != root)
+			if(isActive == 0)
+				CKT_tag_kmer_arr!(ckt, recv_arr)
+			end
+		end
+
+	end
+
+	## STAGE 3 - Write unique kmers to file
+
 end
 
 
@@ -177,37 +280,45 @@ function load_kmer!(path::String, db::Dict{DNAMer{27}, Int8}, kmer_size::Int)
 end
 
 #########################################
-# function: tag_kmer!
-# Tag kmer (set to 0) from a kmer dictionary. Need to explore if can be done
-# with automatic memory recycling
+# function: CKT_tag_kmer!
+# Set the column tag_idx of the composite kmer table to
+# true, indicating that the kmer occurs in other genomes
 #########################################
-function tag_kmer!(refdb::Dict{DNAMer{27}, Int8}, subjdb::Dict{DNAMer{27}, Int8})
-	for (mer, count) in refdb
-		subjdb[mer] = 0
-	end
-
-end
-
-#########################################
-# function: encode_kmer_table!
-# Encode kmer table dictionary to array of UInt64 (for MPI comm)
-#########################################  
-function encode_kmer_table!(db::Dict{DNAMer{27}, Int8}, arr::Array{UInt64})
-	idx=1
-	for (mer, count) in db
-		enc_mer = BioSequences.encoded_data(mer)
-		arr[idx] = enc_mer
-		idx += 1
-	end
-end
-
-
 function CKT_tag_kmer!(table::composite_kmer_table, kmer::DNAMer{27})
 	kmer_int = BioSequences.encoded_data(kmer)
 	table.table[kmer_int][:, table.tag_idx] .= true
 end
 
+#########################################
+## function: CKT_tag_kmer_arr!
+## Set the column tag_idx of the composite kmer table to
+## true from an encoded kmer table, indicating that the kmer occurs in other genomes
+##########################################
+function CKT_tag_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64})
+	for kmer_int in arr
+		if(haskey(table.table, kmer_int))
+			table.table[kmer_int][:, table.tag_idx] .= true
+		end
+	end	
+end
 
+#########################################
+## function: CKT_get_all_encoded_genome_kmer_arr!
+## Get all kmer table from CKT data structure
+## in encoded (UInt64) data type. The resulting
+## array can be sent via MPI comm.
+##########################################
+function CKT_get_all_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64})
+	for kmer_int in collect(keys(table.table))
+		push!(arr, kmer_int)
+	end
+end
+
+#########################################
+# function: CKT_get_genome_kmer_table!
+# Get a genome's kmer table from CKT data structure
+# comment: no error-handling on non-existing genome 
+#########################################
 function CKT_get_genome_kmer_table!(table::composite_kmer_table, kmer_table::Dict{DNAMer{27}, Int8}, name::String)
 	idx = table.genome2idx[name]
 	for kmer_int in collect(keys(table.table))
@@ -220,6 +331,12 @@ function CKT_get_genome_kmer_table!(table::composite_kmer_table, kmer_table::Dic
 	end
 end
 
+#########################################
+# function: CKT_get_encoded_genome_kmer_arr!
+# Get a genome's kmer table from CKT data structure
+# in encoded (UInt64) data type. The resulting
+# array can be sent via MPI comm.
+#########################################
 function CKT_get_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64}, name::String)
 	idx = table.genome2idx[name]
 	for kmer_int in collect(keys(table.table))
@@ -231,11 +348,20 @@ function CKT_get_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Arra
 	end
 end
 
-
+#########################################
+# function: CKT_get_genomes
+# Get all genome names contained in the CKT data structure
+#
+#########################################
 function CKT_get_genomes(table::composite_kmer_table)
 	return collect(keys(table.genome2idx))
 end
 
+#########################################
+# function: CKT_print_table
+# Print CKT data structure for troubleshooting
+#
+#########################################
 function CKT_print_table(table::composite_kmer_table)
 	names = collect(keys(table.genome2idx))
 	@printf("#kmer")
@@ -256,6 +382,11 @@ function CKT_print_table(table::composite_kmer_table)
 	end
 end
 
+#########################################
+# function: CKT_add_kmer_table!
+# Add a genome's kmer table to the CKT data structure.
+#
+#########################################
 function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{DNAMer{27}, Int8})
 	idx = table.curr_idx
 	table.genome2idx[name] = idx

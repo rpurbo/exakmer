@@ -72,12 +72,13 @@ function main()
 	#end
 	
 	# get one genome encoded kmer array (for scattering)
-	#arr = UInt64[]
+	arr = UInt64[]
 	#CKT_get_encoded_genome_kmer_arr!(db, arr, test)
-	
-	#for kmer_int in arr
-	#	println(kmer_int,"\t", DNAMer{27}(kmer_int))
-	#end	
+	CKT_get_all_encoded_genome_kmer_arr!(db,arr)	
+
+	for kmer_int in arr
+		println(kmer_int,"\t", DNAMer{27}(kmer_int))
+	end	
 
 	#tagmer = DNAMer{27}("AGTAGCGAAAGAACAAGGTGCCACAGT")
 	#CKT_print_table(db)
@@ -101,6 +102,12 @@ function CKT_get_genome_kmer_table!(table::composite_kmer_table, kmer_table::Dic
 			kmer_table[key] = 1
 		end
 	end
+end
+
+function CKT_get_all_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64})
+	for kmer_int in collect(keys(table.table))
+		push!(arr, kmer_int)
+	end	
 end
 
 function CKT_get_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64}, name::String)

@@ -20,4 +20,4 @@ export UCX_WARN_UNUSED_ENV_VARS=n
 
 # MPI will automatically use the PBS_NODEFILE to spread the jobs
 
-mpiexec -np 6 julia bcast_load_genomes.jl
+mpiexec -np 6 julia main.jl
