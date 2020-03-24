@@ -32,7 +32,7 @@ end
 
 function main()
 	KMER_SIZE =27
-	input="list.txt"
+	input="list2.txt"
 	genomes = Dict{String, String}()
 	genome2arr = Dict{String, UInt8}()
 
@@ -52,7 +52,8 @@ function main()
 	db = composite_kmer_table(genome_tot)
 	for (name, path) in genomes
 		idx =  genome2arr[name]
-		merdb = Dict{DNAMer{KMER_SIZE}, Int8}()
+		#merdb = Dict{DNAMer{KMER_SIZE}, Int8}()
+		merdb = Dict{NucleotideSeq, Int8}()
 		load_kmer!(path, merdb,KMER_SIZE)
 		CKT_add_kmer_table!(db, name, merdb)
 		merdb = nothing
@@ -60,25 +61,25 @@ function main()
 
 
 	# Testings
-	#gens = CKT_get_genomes(db)
-	#test = gens[1]
+	gens = CKT_get_genomes(db)
+	test = gens[1]
 
 	# get one genome kmer table
-	#merdb = Dict{DNAMer{KMER_SIZE}, Int8}()
-	#CKT_get_genome_kmer_table!(db, merdb, test)
+	merdb = Dict{DNAMer{KMER_SIZE}, Int8}()
+	CKT_get_genome_kmer_table!(db, merdb, test)
 
-	#for (mer,count) in merdb
-	#	println(mer)
-	#end
+	for (mer,count) in merdb
+		println(mer)
+	end
 	
 	# get one genome encoded kmer array (for scattering)
-	arr = UInt64[]
+	#arr = UInt64[]
 	#CKT_get_encoded_genome_kmer_arr!(db, arr, test)
-	CKT_get_all_encoded_genome_kmer_arr!(db,arr)	
+	#CKT_get_all_encoded_genome_kmer_arr!(db,arr)	
 
-	for kmer_int in arr
-		println(kmer_int,"\t", DNAMer{27}(kmer_int))
-	end	
+	#for kmer_int in arr
+	#	println(kmer_int,"\t", DNAMer{27}(kmer_int))
+	#end	
 
 	#tagmer = DNAMer{27}("AGTAGCGAAAGAACAAGGTGCCACAGT")
 	#CKT_print_table(db)
@@ -146,7 +147,8 @@ function CKT_print_table(table::composite_kmer_table)
 	end
 end
 
-function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{DNAMer{27}, Int8})
+#function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{DNAMer{27}, Int8})
+function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{NucleotideSeq, Int8})
 	idx = table.curr_idx
 	table.genome2idx[name] = idx
 	table.idx2genome[idx] = name
@@ -179,12 +181,12 @@ function encode_kmer_table!(db::Dict{DNAMer{27}, Int8}, arr::Array{UInt64})
 	end	
 end
 
-function load_kmer!(path::String, db::Dict{DNAMer{27}, Int8}, kmer_size::Int)
-
+#function load_kmer!(path::String, db::Dict{DNAMer{27}, Int8}, kmer_size::Int)
+function load_kmer!(path::String, db::Dict{NucleotideSeq, Int8}, kmer_size::Int)
 	ON::Int8 = 1
 	reader = FASTA.Reader(GzipDecompressorStream(open(path)))
 	for record in reader
-		for iter in each(DNAMer{27}, FASTX.FASTA.sequence(record))
+		for iter in each(DNAMer{kmer_size}, FASTX.FASTA.sequence(record))
 			db[iter.fw] = ON
 			db[iter.bw] = ON
 		end

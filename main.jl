@@ -40,12 +40,15 @@ end
 
 #########################################
 # Main Function
+# Comment:
+#	- change DNAMer{27} to NucleotideSeq in params to enable kmer size changes
 #########################################
 
 function main()
 	# Init parameters
 	file = "list.txt"
 	ksize = 27
+	outdir = "/gpfs1/scratch/admin/projects/julia/repos/output"
 
 	##########################################################################
 	## STAGE 1
@@ -114,7 +117,7 @@ function main()
 	end
 
 	# On workers, read the genome fasta files and load them to tables
-	ckt = nothing
+	ckt=composite_kmer_table(0)
 	if(mpi_rank != root) 
 		genomes_num = length(keys(gpath))
 		ckt = composite_kmer_table(genomes_num)
@@ -230,7 +233,21 @@ function main()
 	end
 
 	## STAGE 3 - Write unique kmers to file
+	if(mpi_rank != root)
+		genomes = CKT_get_genomes(ckt)
+		for genome in genomes
+			outfile = outdir * "/" * genome * ".uniq"
+			io = open(outfile, "w")
 
+			gtable = Dict{DNAMer{ksize}, Int8}()
+			CKT_get_genome_kmer_table_untagged!(ckt, gtable, genome)
+			for (kmer,count) in gtable
+				println(io,string(kmer))
+			end
+
+			close(io)
+		end
+	end
 end
 
 
@@ -311,6 +328,25 @@ end
 function CKT_get_all_encoded_genome_kmer_arr!(table::composite_kmer_table, arr::Array{UInt64})
 	for kmer_int in collect(keys(table.table))
 		push!(arr, kmer_int)
+	end
+end
+
+
+#########################################
+# function: CKT_get_genome_kmer_table!
+# Get a genome's kmer table from CKT data structure
+# comment: no error-handling on non-existing genome
+#########################################
+function CKT_get_genome_kmer_table_untagged!(table::composite_kmer_table, kmer_table::Dict{DNAMer{27}, Int8}, name::String)
+	idx = table.genome2idx[name]
+	for kmer_int in collect(keys(table.table))
+		hasKmer = table.table[kmer_int][idx, table.occ_idx]
+		isTagged = table.table[kmer_int][idx, table.tag_idx]
+
+		if(hasKmer == true & isTagged == false)
+			key = DNAMer{27}(kmer_int)
+			kmer_table[key] = 1
+		end
 	end
 end
 
