@@ -48,7 +48,7 @@ end
 function main()
 	# Init parameters
 	file = "list.txt"
-	ksize = 27
+	ksize = 31
 	outdir = "/gpfs1/scratch/admin/projects/julia/repos/output"
 
 	##########################################################################
@@ -125,7 +125,6 @@ function main()
 		
 		for (name,path) in gpath
 			# println("",banner," ", name, " ",path)
-			#gtable = Dict{DNAMer{kmer_size}, Int8}()
 			gtable = Dict{NucleotideSeq, Int8}()
 			load_kmer!(path, gtable, kmer_size)
 			CKT_add_kmer_table!(ckt, name, gtable)
@@ -140,7 +139,7 @@ function main()
 	## STAGE 2
 	## Run the scatter & gather communication
 	## 1) root assign active worker (consecutively based on rank) - scatter
-	## 2) active worker send its kmer table to root - gather
+	## 2) active worker send its kmer table to root
 	## 3) root broadcast kmer table - broadcast
 	## 4) workers tag the received kmer table - broadcast
 	##########################################################################
@@ -241,7 +240,6 @@ function main()
 			outfile = outdir * "/" * genome * ".uniq"
 			io = open(outfile, "w")
 
-			#gtable = Dict{DNAMer{ksize}, Int8}()
 			gtable = Dict{NucleotideSeq, Int8}()
 			CKT_get_genome_kmer_table_untagged!(ckt, gtable, genome)
 			for (kmer,count) in gtable
@@ -286,7 +284,6 @@ end
 # Read fasta from path and load all the kmers to a dictionary
 # comment: need to check if it's zipped or is in fasta format
 #########################################
-#function load_kmer!(path::String, db::Dict{DNAMer{27}, Int8}, kmer_size::Int)
 function load_kmer!(path::String, db::Dict{NucleotideSeq, Int8}, kmer_size::Int)
 	ON::Int8 = 1
 	reader = FASTA.Reader(GzipDecompressorStream(open(path)))
@@ -305,7 +302,6 @@ end
 # Set the column tag_idx of the composite kmer table to
 # true, indicating that the kmer occurs in other genomes
 #########################################
-#function CKT_tag_kmer!(table::composite_kmer_table, kmer::DNAMer{27})
 function CKT_tag_kmer!(table::composite_kmer_table, kmer::NucleotideSeq)
 	kmer_int = BioSequences.encoded_data(kmer)
 	table.table[kmer_int][:, table.tag_idx] .= true
@@ -342,7 +338,6 @@ end
 # Get a genome's kmer table from CKT data structure
 # comment: no error-handling on non-existing genome
 #########################################
-#function CKT_get_genome_kmer_table_untagged!(table::composite_kmer_table, kmer_table::Dict{DNAMer{27}, Int8}, name::String)
 function CKT_get_genome_kmer_table_untagged!(table::composite_kmer_table, kmer_table::Dict{NucleotideSeq, Int8}, name::String)
 	idx = table.genome2idx[name]
 	for kmer_int in collect(keys(table.table))
@@ -361,7 +356,6 @@ end
 # Get a genome's kmer table from CKT data structure
 # comment: no error-handling on non-existing genome 
 #########################################
-#function CKT_get_genome_kmer_table!(table::composite_kmer_table, kmer_table::Dict{DNAMer{27}, Int8}, name::String)
 function CKT_get_genome_kmer_table!(table::composite_kmer_table, kmer_table::Dict{NucleotideSeq, Int8}, name::String)
 	idx = table.genome2idx[name]
 	for kmer_int in collect(keys(table.table))
@@ -414,7 +408,7 @@ function CKT_print_table(table::composite_kmer_table)
 	println("")
 
 	for kmer_int in collect(keys(table.table))
-		@printf("%s", string(DNAMer{27}(kmer_int)))
+		@printf("%s", string(DNAMer{table.kmer_size}(kmer_int)))
 		for name in names
 			idx = table.genome2idx[name]
 			occ = table.table[kmer_int][idx, table.occ_idx]
@@ -430,7 +424,6 @@ end
 # Add a genome's kmer table to the CKT data structure.
 #
 #########################################
-#function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{DNAMer{27}, Int8})
 function CKT_add_kmer_table!(table::composite_kmer_table, name::String, kmer_table::Dict{NucleotideSeq, Int8})
 	idx = table.curr_idx
 	table.genome2idx[name] = idx
