@@ -42,7 +42,6 @@ end
 #########################################
 # Main Function
 # Comment:
-#	- change DNAMer{27} to NucleotideSeq in params to enable kmer size changes
 #########################################
 
 function main()
@@ -164,21 +163,10 @@ function main()
 		isActive = 0
 		if(mpi_rank == root)
 			MPI.Scatter_in_place!(send_mesg,1,root,comm)
-
-			#debug
-			#for i in 2:(mpi_size)
-			#	out = "[root] " * string(i-1) * " " * string(send_mesg[i])
-			#	println(out)
-			#end
 		else
 			buff = Array{Int8}(undef, 1)
 			MPI.Scatter_in_place!(buff,1,root,comm)
 			isActive = buff[1]
-
-			#debug
-			#if(isActive == 1)
-			#	println("",banner," is active")
-			#end
 		end
 
 		# Stage 2.3 - Active worker send the kmer table to root directly
@@ -194,12 +182,6 @@ function main()
 			# Receive kmer table
 			ckt_arr = Array{UInt64}(undef, arr_size)
 			MPI.Recv!(ckt_arr, active_rank, 2, comm)			
-
-			#debug
-			#for kmer_int in ckt_arr
-			#	key = DNAMer{27}(kmer_int)
-			#	println("",banner,string(key))
-			#end
 		else
 			if(isActive == 1)
 				# Send the size of kmer table for memory allocation
@@ -217,11 +199,9 @@ function main()
 		# Stage 2.4 - Broadcast kmer table to all workers (except active)
 		recv_arr = nothing
 		if(mpi_rank == root)
-			#println("bcast rank ", string(active_rank)," ", string(length(ckt_arr)))
 			MPI.bcast(ckt_arr, root, comm)
 		else	
 			recv_arr = MPI.bcast(C_NULL, root, comm)
-			#println("", banner, "active rank:", string(active_rank)," size:", string(length(recv_arr)))
 		end
 
 		# Stage 2.5 - Tag non-active workers's CKT kmer table using the received kmers
@@ -233,7 +213,11 @@ function main()
 
 	end
 
-	## STAGE 3 - Write unique kmers to file
+
+	##########################################################################
+	## STAGE 3 
+	## Write un-tagged (unique) kmers to file
+	##########################################################################
 	if(mpi_rank != root)
 		genomes = CKT_get_genomes(ckt)
 		for genome in genomes
