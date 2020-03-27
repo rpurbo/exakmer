@@ -42,12 +42,18 @@ end
 #########################################
 # Main Function
 # Comment:
+# NEXT: 
+# 	1) create benchmark/baseline output w/ perl
+# 	2) test on PBS cluster
+# 	3) test on more genomes
+#	4) benchmarking
+#	5) aggresive mode = instead of ring comm, use all-to-all comm
 #########################################
 
 function main()
 	# Init parameters
 	file = "list.txt"
-	ksize = 31
+	ksize = 27
 	outdir = "/gpfs1/scratch/admin/projects/julia/repos/output"
 
 	##########################################################################
@@ -181,7 +187,11 @@ function main()
 
 			# Receive kmer table
 			ckt_arr = Array{UInt64}(undef, arr_size)
-			MPI.Recv!(ckt_arr, active_rank, 2, comm)			
+			MPI.Recv!(ckt_arr, active_rank, 2, comm)
+
+			
+			#println(string(active_rank),":",string(length(ckt_arr)))
+			#CHECKPOINT - root received correct numbers of kmer from workers
 		else
 			if(isActive == 1)
 				# Send the size of kmer table for memory allocation
@@ -199,20 +209,39 @@ function main()
 		# Stage 2.4 - Broadcast kmer table to all workers (except active)
 		recv_arr = nothing
 		if(mpi_rank == root)
+			arr_size = length(ckt_arr)
+			MPI.bcast(arr_size, root, comm)
 			MPI.bcast(ckt_arr, root, comm)
+			#println(string(active_rank),":",string(length(ckt_arr)))
+			#CHECKPOINT - root broadcasted correct numbers of kmer for workers
+
 		else	
+			arr_size = MPI.bcast(C_NULL, root, comm)
+			#println("from ",string(active_rank)," to ",string(mpi_rank),":",string(arr_size))
+
+			recv_arr = Array{UInt64}(undef, arr_size)
 			recv_arr = MPI.bcast(C_NULL, root, comm)
+			#println("from ",string(active_rank)," to ",string(mpi_rank),":",string(length(recv_arr)))
+			#CHECKPOINT - workers received correct numbers of kmer for workers
+
+
 		end
 
 		# Stage 2.5 - Tag non-active workers's CKT kmer table using the received kmers
 		if(mpi_rank != root)
 			if(isActive == 0)
+				#println("from ",string(active_rank)," to ",string(mpi_rank),":",string(length(recv_arr)))
 				CKT_tag_kmer_arr!(ckt, recv_arr)
+				#println("from ",string(active_rank)," to ",string(mpi_rank),":",string(length(collect(keys(ckt.table)))))
+				#CHECKPOINT - both recv_arr and ckt are intact
 			end
 		end
 
 	end
 
+	
+	#println("from ",string(mpi_rank),":",string(length(collect(keys(ckt.table)))))
+	#CHECKPOINT - ckt is intact
 
 	##########################################################################
 	## STAGE 3 
@@ -220,12 +249,19 @@ function main()
 	##########################################################################
 	if(mpi_rank != root)
 		genomes = CKT_get_genomes(ckt)
+
+		#println("from ",string(mpi_rank),":",string(length(collect(keys(ckt.table)))))
+
 		for genome in genomes
+			#println("from ",string(mpi_rank),":",genome)
 			outfile = outdir * "/" * genome * ".uniq"
 			io = open(outfile, "w")
 
 			gtable = Dict{NucleotideSeq, Int8}()
 			CKT_get_genome_kmer_table_untagged!(ckt, gtable, genome)
+
+			#println("from ",string(mpi_rank),":",string(length(collect(keys(gtable)))))
+
 			for (kmer,count) in gtable
 				println(io,string(kmer))
 			end
@@ -324,15 +360,19 @@ end
 #########################################
 function CKT_get_genome_kmer_table_untagged!(table::composite_kmer_table, kmer_table::Dict{NucleotideSeq, Int8}, name::String)
 	idx = table.genome2idx[name]
+
 	for kmer_int in collect(keys(table.table))
 		hasKmer = table.table[kmer_int][idx, table.occ_idx]
 		isTagged = table.table[kmer_int][idx, table.tag_idx]
 
-		if(hasKmer == true & isTagged == false)
+		if(hasKmer == true && isTagged == false)
 			key = DNAMer{table.kmer_size}(kmer_int)
 			kmer_table[key] = 1
+			nottag += 1	
 		end
+
 	end
+
 end
 
 #########################################
